@@ -5,21 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voronoi Connect 4 - Strategic Edge Game</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header class="header">
             <h1 class="title">Voronoi Connect 4</h1>
-            <p class="subtitle">Strategic Edge Capture Game</p>
+            <button class="theme-toggle" id="themeToggle">
+                <span id="themeIcon">🌙</span>
+                <span>Dark Mode</span>
+            </button>
         </header>
 
         <div class="game-controls">
             <div class="input-section">
-                <label for="pointCount">Number of Points:</label>
+                <label for="pointCount">Points:</label>
                 <input type="number" id="pointCount" min="3" max="20" value="8">
-                <button id="generateBtn" class="btn btn-primary">Generate Voronoi</button>
+                <button id="generateBtn" class="btn btn-primary">Generate</button>
             </div>
             
             <div class="game-settings">
@@ -27,22 +29,22 @@
                     <label class="toggle-label">
                         <input type="checkbox" id="timerToggle">
                         <span class="toggle-slider"></span>
-                        Timer Mode
+                        Timer
                     </label>
                     <div id="timerDisplay" class="timer-display">00:00</div>
                 </div>
                 
                 <div class="game-info">
                     <div class="player-score">
-                        <span class="player-label">Player 1:</span>
-                        <span id="player1Score">0</span>
+                        <span class="player-label">Player 1</span>
+                        <span class="score" id="player1Score">0</span>
                     </div>
                     <div class="current-player">
                         <span id="currentPlayerText">Player 1's Turn</span>
                     </div>
                     <div class="player-score">
-                        <span class="player-label">Player 2:</span>
-                        <span id="player2Score">0</span>
+                        <span class="player-label">Player 2</span>
+                        <span class="score" id="player2Score">0</span>
                     </div>
                 </div>
             </div>
@@ -55,13 +57,36 @@
         </div>
 
         <div class="game-actions">
-            <button id="resetBtn" class="btn btn-secondary">Reset Game</button>
-            <button id="newGameBtn" class="btn btn-accent">New Game</button>
+            <button id="resetBtn" class="btn btn-secondary">Reset</button>
+            <button id="newGameBtn" class="btn btn-primary">New Game</button>
         </div>
 
         <div id="gameStatus" class="game-status"></div>
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        
+        // Check for saved theme or default to light
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        
+        function updateThemeIcon(theme) {
+            themeIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+    </script>
 </body>
 </html>

@@ -339,6 +339,7 @@ class VoronoiConnect4 {
 
     findCycles(startVertex, edgeMap, globallyVisited) {
         const cycles = [];
+        const foundCyclesSet = new Set(); // Track all found cycles globally
         const visitedInPath = new Set();
         
         const dfs = (current, path, visited) => {
@@ -352,18 +353,16 @@ class VoronoiConnect4 {
                 if (!path.includes(neighbor)) {
                     // Continue exploring
                     dfs(neighbor, path, visited);
-                } else if (path.length > 2 && neighbor === path[0]) {
+                } else if (path.length > 2 && neighbor === path[0] && path.length === 3) {
                     // Found a cycle: path is a complete loop
+                    // Create normalized cycle key (sorted vertices to handle duplicates)
                     const cycle = [...path];
-                    const cycleKey = cycle.sort().join('-');
+                    const sortedCycle = cycle.slice().sort();
+                    const cycleKey = sortedCycle.join('|');
                     
                     // Check if this cycle is unique
-                    const isUnique = !cycles.some(existing => {
-                        const existingKey = existing.sort().join('-');
-                        return existingKey === cycleKey;
-                    });
-                    
-                    if (isUnique && cycle.length >= 3) {
+                    if (!foundCyclesSet.has(cycleKey)) {
+                        foundCyclesSet.add(cycleKey);
                         cycles.push(cycle);
                     }
                 }

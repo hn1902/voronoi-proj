@@ -285,14 +285,26 @@ class VoronoiConnect4 {
             .filter(([edgeId, edgePlayer]) => edgePlayer === player)
             .map(([edgeId]) => edgeId);
 
-        // Base score from number of edges
-        let score = playerEdges.length;
-
-        // Bonus points for forming complete polygons (3 points per side)
+        // Calculate polygon bonuses first
         const polygons = this.findCompletePolygons(playerEdges);
+        
+        // Track which edges are part of polygons
+        const edgesInPolygons = new Set();
         for (const polygon of polygons) {
-            score += polygon.length * 3; // 3 points per side of the polygon
+            for (let i = 0; i < polygon.length; i++) {
+                const v1 = polygon[i];
+                const v2 = polygon[(i + 1) % polygon.length];
+                // Create edge ID (sorted for consistency)
+                const coords = [v1, v2].sort();
+                edgesInPolygons.add(`${coords[0]}-${coords[1]}`);
+            }
         }
+        
+        // Base score: 1 point per edge that's NOT part of any polygon
+        let score = playerEdges.filter(edgeId => !edgesInPolygons.has(edgeId)).length;
+        
+        // Bonus: 4 points per edge in a polygon (1 base + 3 bonus)
+        score += edgesInPolygons.size * 4;
 
         return score;
     }

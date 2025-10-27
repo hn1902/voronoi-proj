@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voronoi Connect 4 - Strategic Edge Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">Voronoi Connect 4</h1>
+            <p class="subtitle">Strategic Edge Capture Game</p>
+        </header>
+
+        <div class="game-controls">
+            <div class="input-section">
+                <label for="pointCount">Number of Points:</label>
+                <input type="number" id="pointCount" min="3" max="20" value="8">
+                <button id="generateBtn" class="btn btn-primary">Generate Voronoi</button>
+            </div>
+            
+            <div class="game-settings">
+                <div class="timer-section">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="timerToggle">
+                        <span class="toggle-slider"></span>
+                        Timer Mode
+                    </label>
+                    <div id="timerDisplay" class="timer-display">00:00</div>
+                </div>
+                
+                <div class="game-info">
+                    <div class="player-score">
+                        <span class="player-label">Player 1:</span>
+                        <span id="player1Score">0</span>
+                    </div>
+                    <div class="current-player">
+                        <span id="currentPlayerText">Player 1's Turn</span>
+                    </div>
+                    <div class="player-score">
+                        <span class="player-label">Player 2:</span>
+                        <span id="player2Score">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="game-area">
+            <div id="voronoiContainer" class="voronoi-container">
+                <svg id="voronoiSvg" width="800" height="600"></svg>
+            </div>
+        </div>
+
+        <div class="game-actions">
+            <button id="resetBtn" class="btn btn-secondary">Reset Game</button>
+            <button id="newGameBtn" class="btn btn-accent">New Game</button>
+        </div>
+
+        <div id="gameStatus" class="game-status"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

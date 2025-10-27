@@ -296,64 +296,88 @@ class VoronoiConnect4 {
     }
 
     findCompletePolygons(playerEdges) {
-        // Simplified polygon detection - look for closed loops
+        // Find closed loops (polygons) formed by connected edges of the same player
         const polygons = [];
-        const edgeMap = new Map();
+        if (playerEdges.length < 3) return polygons; // Need at least 3 edges for a polygon
         
-        // Build adjacency map
+        // Build adjacency map: vertex -> connected vertices
+        const edgeMap = new Map();
+        const edges = new Map(); // Store actual edge information
+        
         for (const edgeId of playerEdges) {
             const [start, end] = edgeId.split('-');
             const [x1, y1] = start.split(',').map(Number);
             const [x2, y2] = end.split(',').map(Number);
             
-            if (!edgeMap.has(`${x1},${y1}`)) edgeMap.set(`${x1},${y1}`, []);
-            if (!edgeMap.has(`${x2},${y2}`)) edgeMap.set(`${x2},${y2}`, []);
+            const v1 = `${x1},${y1}`;
+            const v2 = `${x2},${y2}`;
             
-            edgeMap.get(`${x1},${y1}`).push(`${x2},${y2}`);
-            edgeMap.get(`${x2},${y2}`).push(`${x1},${y1}`);
+            // Add to edge map
+            if (!edgeMap.has(v1)) edgeMap.set(v1, []);
+            if (!edgeMap.has(v2)) edgeMap.set(v2, []);
+            
+            edgeMap.get(v1).push(v2);
+            edgeMap.get(v2).push(v1);
+            
+            // Store edge with vertices
+            edges.set(edgeId, { v1, v2 });
         }
 
-        // Find cycles (simplified approach)
+        // Find all cycles using DFS
         const visited = new Set();
-        for (const [vertex, neighbors] of edgeMap) {
-            if (neighbors.length >= 2 && !visited.has(vertex)) {
-                const cycle = this.findCycle(vertex, edgeMap, visited);
-                if (cycle && cycle.length >= 3) {
-                    polygons.push(cycle);
-                }
-            }
+        const cycles = [];
+        
+        for (const vertex of edgeMap.keys()) {
+            if (edgeMap.get(vertex).length < 2 || visited.has(vertex)) continue;
+            
+            const cyclesFromVertex = this.findCycles(vertex, edgeMap, visited);
+            cycles.push(...cyclesFromVertex);
         }
-
-        return polygons;
+        
+        return cycles;
     }
 
-    findCycle(startVertex, edgeMap, visited) {
-        const stack = [startVertex];
-        const path = [];
-        const cycle = [];
-
-        while (stack.length > 0) {
-            const current = stack.pop();
-            if (visited.has(current)) continue;
-
+    findCycles(startVertex, edgeMap, globallyVisited) {
+        const cycles = [];
+        const visitedInPath = new Set();
+        
+        const dfs = (current, path, visited) => {
+            // Mark current as visited in this path
             visited.add(current);
             path.push(current);
-            cycle.push(current);
-
+            
             const neighbors = edgeMap.get(current) || [];
+            
             for (const neighbor of neighbors) {
-                if (path.includes(neighbor) && neighbor !== path[path.length - 2]) {
-                    // Found a cycle
-                    const cycleStart = path.indexOf(neighbor);
-                    return path.slice(cycleStart);
-                }
-                if (!visited.has(neighbor)) {
-                    stack.push(neighbor);
+                if (!path.includes(neighbor)) {
+                    // Continue exploring
+                    dfs(neighbor, path, visited);
+                } else if (path.length > 2 && neighbor === path[0]) {
+                    // Found a cycle: path is a complete loop
+                    const cycle = [...path];
+                    const cycleKey = cycle.sort().join('-');
+                    
+                    // Check if this cycle is unique
+                    const isUnique = !cycles.some(existing => {
+                        const existingKey = existing.sort().join('-');
+                        return existingKey === cycleKey;
+                    });
+                    
+                    if (isUnique && cycle.length >= 3) {
+                        cycles.push(cycle);
+                    }
                 }
             }
-        }
-
-        return cycle.length >= 3 ? cycle : null;
+            
+            // Backtrack
+            path.pop();
+            visited.delete(current);
+        };
+        
+        dfs(startVertex, [], visitedInPath);
+        globallyVisited.add(startVertex);
+        
+        return cycles;
     }
 
     switchPlayer() {

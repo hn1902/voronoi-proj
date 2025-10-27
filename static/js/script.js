@@ -288,9 +288,11 @@ class VoronoiConnect4 {
         // Base score from number of edges
         let score = playerEdges.length;
 
-        // Bonus points for forming complete polygons
+        // Bonus points for forming complete polygons (3 points per side)
         const polygons = this.findCompletePolygons(playerEdges);
-        score += polygons.length * 5; // 5 bonus points per complete polygon
+        for (const polygon of polygons) {
+            score += polygon.length * 3; // 3 points per side of the polygon
+        }
 
         return score;
     }
@@ -338,7 +340,7 @@ class VoronoiConnect4 {
     }
 
     findCycles(startVertex, edgeMap, globallyVisited) {
-        const cycles = [];
+        const foundCycles = new Set(); // Use Set to prevent duplicates
         const visitedInPath = new Set();
         
         const dfs = (current, path, visited) => {
@@ -355,17 +357,12 @@ class VoronoiConnect4 {
                 } else if (path.length > 2 && neighbor === path[0]) {
                     // Found a cycle: path is a complete loop
                     const cycle = [...path];
-                    const cycleKey = cycle.sort().join('-');
+                    // Normalize the cycle by rotating to start with the smallest vertex
+                    const minIndex = cycle.indexOf(cycle.reduce((min, v) => v < min ? v : min));
+                    const normalizedCycle = [...cycle.slice(minIndex), ...cycle.slice(0, minIndex)];
+                    const cycleKey = normalizedCycle.join('-');
                     
-                    // Check if this cycle is unique
-                    const isUnique = !cycles.some(existing => {
-                        const existingKey = existing.sort().join('-');
-                        return existingKey === cycleKey;
-                    });
-                    
-                    if (isUnique && cycle.length >= 3) {
-                        cycles.push(cycle);
-                    }
+                    foundCycles.add(cycleKey);
                 }
             }
             
@@ -377,7 +374,8 @@ class VoronoiConnect4 {
         dfs(startVertex, [], visitedInPath);
         globallyVisited.add(startVertex);
         
-        return cycles;
+        // Convert Set to Array
+        return Array.from(foundCycles).map(cycleKey => cycleKey.split('-'));
     }
 
     switchPlayer() {

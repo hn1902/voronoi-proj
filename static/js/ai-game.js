@@ -284,53 +284,108 @@ class VoronoiAIGame {
         if (!this.aiEnabled || this.currentPlayer !== 2 || this.aiThinking) return;
         
         this.aiThinking = true;
-        this.showStatus('AI is thinking...', 'info');
+        this.showStatus('MCTS AI is thinking... Running 500 simulations', 'info');
         
-        // Simulate AI thinking time
-        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-        
-        // Get available edges
-        const availableEdges = this.edges.filter(edge => !edge.claimed);
-        
-        if (availableEdges.length > 0) {
-            // Simple AI strategy: prioritize edges that might form polygons
-            let selectedEdge = this.selectBestEdge(availableEdges);
-            this.claimEdge(selectedEdge);
+        try {
+            // Prepare game state for MCTS AI
+            const gameState = {
+                points: this.points,
+                edges: this.edges,
+                claimed_edges: Object.fromEntries(this.claimedEdges),
+                current_player: this.currentPlayer,
+                player1_score: this.player1Score,
+                player2_score: this.player2Score,
+                simulations: 500  // Configurable number of MCTS simulations
+            };
+            
+            // Call MCTS backend API
+            const response = await fetch('/api/mcts_move', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(gameState)
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok && result.status === 'success') {
+                // Get the selected edge index
+                const edgeIndex = result.edge_index;
+                const selectedEdge = this.edges[edgeIndex];
+                
+                if (selectedEdge && !selectedEdge.claimed) {
+                    // Show debug info if available
+                    if (result.debug_stats) {
+                        console.log('MCTS Debug Stats:', result.debug_stats);
+                    }
+                    
+                    // Claim the edge
+                    this.claimEdge(selectedEdge);
+                    
+                    // Show AI decision info
+                    if (result.new_scores) {
+                        const scoreDiff = result.new_scores.player2 - this.player2Score;
+                        if (scoreDiff > 1) {
+                            this.showStatus(`AI completed a polygon! +${scoreDiff} points`, 'info');
+                        }
+                    }
+                } else {
+                    console.error('MCTS selected invalid edge:', result);
+                    this.showStatus('AI error: Invalid move selected', 'error');
+                }
+            } else {
+                console.error('MCTS API error:', result.error);
+                this.showStatus('AI error: ' + (result.error || 'Unknown error'), 'error');
+                
+                // Fallback to simple heuristic if MCTS fails
+                this.fallbackAIMove();
+            }
+            
+        } catch (error) {
+            console.error('Error calling MCTS API:', error);
+            this.showStatus('AI connection error, using fallback', 'warning');
+            
+            // Fallback to simple heuristic
+            this.fallbackAIMove();
         }
         
         this.aiThinking = false;
     }
 
-    selectBestEdge(availableEdges) {
-        // Simple heuristic-based AI
-        // 1. Prefer edges that connect to already claimed edges
-        // 2. Prefer edges that might form polygons
-        // 3. Random choice if no clear preference
+    fallbackAIMove() {
+        // Fallback simple heuristic when MCTS fails
+        const availableEdges = this.edges.filter(edge => !edge.claimed);
         
+        if (availableEdges.length > 0) {
+            // Simple strategy: prioritize edges that might form polygons
+            let selectedEdge = this.selectBestEdgeFallback(availableEdges);
+            this.claimEdge(selectedEdge);
+        }
+    }
+
+    selectBestEdgeFallback(availableEdges) {
+        // Fallback heuristic-based selection
         const player1Edges = Array.from(this.claimedEdges.entries())
             .filter(([edgeId, player]) => player === 1)
             .map(([edgeId]) => edgeId);
         
-        // Score each available edge
         const scoredEdges = availableEdges.map(edge => {
-            let score = Math.random(); // Base random score
+            let score = Math.random();
             
-            // Check if edge connects to player 1's edges (defensive)
             for (const playerEdgeId of player1Edges) {
                 if (this.edgesShareVertex(edge.id, playerEdgeId)) {
-                    score += 2; // Prefer blocking opponent
+                    score += 2;
                 }
             }
             
-            // Check if edge could form a polygon
             if (this.couldFormPolygon(edge.id, 2)) {
-                score += 3; // Prefer forming polygons
+                score += 3;
             }
             
             return { edge, score };
         });
         
-        // Sort by score and select the best
         scoredEdges.sort((a, b) => b.score - a.score);
         return scoredEdges[0].edge;
     }

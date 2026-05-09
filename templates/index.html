@@ -25,6 +25,14 @@
             </div>
             
             <div class="game-settings">
+                <div class="ai-section">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="aiToggle">
+                        <span class="toggle-slider"></span>
+                        AI Mode
+                    </label>
+                </div>
+                
                 <div class="timer-section">
                     <label class="toggle-label">
                         <input type="checkbox" id="timerToggle">
@@ -64,7 +72,7 @@
         <div id="gameStatus" class="game-status"></div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ai-game.js') }}"></script>
     <script>
         // Theme toggle functionality
         const themeToggle = document.getElementById('themeToggle');

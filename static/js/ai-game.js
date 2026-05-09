@@ -18,6 +18,12 @@ class VoronoiAIGame {
         this.aiEnabled = false;
         this.aiThinking = false;
         
+        // AI Suggestion Mode properties
+        this.aiMoveHistory = [];  // Track AI's move history
+        this.currentSuggestions = [];  // Current AI suggestions
+        this.suggestionMode = 'advisor';  // 'advisor' = show suggestions, 'auto' = AI plays
+        this.aiSimulationCount = 500;
+        
         this.initializeEventListeners();
         this.createTooltip();
     }
@@ -33,8 +39,30 @@ class VoronoiAIGame {
         if (aiToggle) {
             aiToggle.addEventListener('change', (e) => {
                 this.aiEnabled = e.target.checked;
+                this.toggleAISidebar(this.aiEnabled);
                 this.resetGame();
-                this.showStatus(this.aiEnabled ? 'AI mode enabled! You are Player 1.' : 'AI mode disabled.', 'info');
+                this.aiMoveHistory = [];  // Clear history on new game
+                this.updateAIMoveHistoryDisplay();
+                this.showStatus(this.aiEnabled ? 'AI Advisor mode enabled! You are Player 1. AI will suggest moves for Player 2.' : 'AI mode disabled.', 'info');
+            });
+        }
+
+        // AI Settings - Simulation count
+        const simulationCount = document.getElementById('simulationCount');
+        if (simulationCount) {
+            simulationCount.addEventListener('change', (e) => {
+                this.aiSimulationCount = parseInt(e.target.value);
+                this.showStatus(`AI simulations set to ${this.aiSimulationCount}`, 'info');
+            });
+        }
+
+        // Refresh suggestions button
+        const refreshBtn = document.getElementById('refreshSuggestions');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                if (this.aiEnabled && this.currentPlayer === 2 && this.gameActive) {
+                    this.fetchAISuggestions();
+                }
             });
         }
 
@@ -261,6 +289,9 @@ class VoronoiAIGame {
     claimEdge(edge) {
         if (!this.gameActive || edge.claimed || this.aiThinking) return;
 
+        // Track score before move for AI history
+        const previousScore = this.currentPlayer === 2 ? this.player2Score : this.player1Score;
+
         edge.claimed = true;
         edge.player = this.currentPlayer;
         this.claimedEdges.set(edge.id, this.currentPlayer);
@@ -276,6 +307,17 @@ class VoronoiAIGame {
 
         // Update score
         this.updateScore();
+        
+        // Track AI move if it's Player 2 and AI mode is enabled
+        if (this.currentPlayer === 2 && this.aiEnabled) {
+            const newScore = this.player2Score;
+            const scoreGain = newScore - previousScore;
+            this.addMoveToAIHistory(edge, scoreGain);
+        }
+        
+        // Clear AI suggestions after any move
+        this.clearSuggestions();
+        
         this.switchPlayer();
         this.checkGameEnd();
     }
@@ -523,16 +565,19 @@ class VoronoiAIGame {
         this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
         document.getElementById('currentPlayerText').textContent = 
             this.aiEnabled ? 
-                (this.currentPlayer === 1 ? "Your Turn" : "AI's Turn") :
+                (this.currentPlayer === 1 ? "Your Turn" : "AI's Turn - View Suggestions →") :
                 `Player ${this.currentPlayer}'s Turn`;
         
         if (this.timerActive) {
             this.startTimer();
         }
         
-        // If AI's turn, make AI move
+        // If AI mode enabled and it's Player 2's turn, fetch suggestions
         if (this.aiEnabled && this.currentPlayer === 2 && this.gameActive) {
-            setTimeout(() => this.makeAIMove(), 500);
+            this.fetchAISuggestions();
+        } else {
+            // Clear suggestions when it's not AI's turn
+            this.clearSuggestions();
         }
     }
 
@@ -648,6 +693,172 @@ class VoronoiAIGame {
             }, 3000);
         }
     }
+
+    // ==================== AI SIDEBAR & SUGGESTION METHODS ====================
+
+    toggleAISidebar(show) {
+        const sidebar = document.getElementById('aiSidebar');
+        if (sidebar) {
+            sidebar.style.display = show ? 'block' : 'none';
+        }
+    }
+
+    async fetchAISuggestions() {
+        if (!this.aiEnabled || this.currentPlayer !== 2 || !this.gameActive) return;
+        
+        this.aiThinking = true;
+        this.showStatus('MCTS AI is analyzing... Running simulations', 'info');
+        
+        try {
+            const gameState = {
+                points: this.points,
+                edges: this.edges,
+                claimed_edges: Object.fromEntries(this.claimedEdges),
+                current_player: this.currentPlayer,
+                player1_score: this.player1Score,
+                player2_score: this.player2Score,
+                top_n: 5,
+                simulations: this.aiSimulationCount
+            };
+            
+            const response = await fetch('/api/mcts_suggestions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(gameState)
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok && result.status === 'success') {
+                this.currentSuggestions = result.suggestions;
+                this.displaySuggestions(result.suggestions);
+                this.highlightSuggestedEdges(result.suggestions);
+                this.showStatus('AI suggestions ready! Click a highlighted edge or suggestion.', 'info');
+            } else {
+                console.error('MCTS suggestions error:', result.error);
+                this.showStatus('AI analysis failed', 'error');
+            }
+            
+        } catch (error) {
+            console.error('Error fetching AI suggestions:', error);
+            this.showStatus('AI connection error', 'error');
+        }
+        
+        this.aiThinking = false;
+    }
+
+    displaySuggestions(suggestions) {
+        const container = document.getElementById('aiSuggestions');
+        if (!container) return;
+        
+        if (!suggestions || suggestions.length === 0) {
+            container.innerHTML = '<p class="placeholder-text">No suggestions available</p>';
+            return;
+        }
+        
+        container.innerHTML = suggestions.map((sugg, index) => {
+            const edge = this.edges[sugg.action];
+            const edgeLabel = this.getEdgeLabel(edge);
+            return `
+                <div class="suggestion-item" data-edge-index="${sugg.action}" data-rank="${sugg.rank}">
+                    <div class="suggestion-rank rank-${sugg.rank}">${sugg.rank}</div>
+                    <div class="suggestion-info">
+                        <div class="suggestion-edge">${edgeLabel}</div>
+                        <div class="suggestion-confidence">${sugg.confidence}% confidence • ${sugg.visits} visits</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Add click handlers to suggestion items
+        container.querySelectorAll('.suggestion-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const edgeIndex = parseInt(item.dataset.edgeIndex);
+                const edge = this.edges[edgeIndex];
+                if (edge && !edge.claimed) {
+                    this.claimEdge(edge);
+                }
+            });
+        });
+    }
+
+    getEdgeLabel(edge) {
+        // Create a short label for the edge
+        const x1 = Math.round(edge.x1);
+        const y1 = Math.round(edge.y1);
+        const x2 = Math.round(edge.x2);
+        const y2 = Math.round(edge.y2);
+        return `(${x1},${y1})→(${x2},${y2})`;
+    }
+
+    highlightSuggestedEdges(suggestions) {
+        // Remove existing highlights
+        this.svg.selectAll('.voronoi-edge')
+            .classed('edge-suggestion-1 edge-suggestion-2 edge-suggestion-3 edge-suggestion-4 edge-suggestion-5', false);
+        
+        // Add new highlights
+        suggestions.forEach(sugg => {
+            const edge = this.edges[sugg.action];
+            if (edge && !edge.claimed) {
+                this.svg.selectAll('.voronoi-edge')
+                    .filter(d => d.id === edge.id)
+                    .classed(`edge-suggestion-${sugg.rank}`, true);
+            }
+        });
+    }
+
+    clearSuggestions() {
+        this.currentSuggestions = [];
+        
+        // Clear sidebar display
+        const container = document.getElementById('aiSuggestions');
+        if (container) {
+            container.innerHTML = '<p class="placeholder-text">AI suggestions will appear on Player 2\'s turn</p>';
+        }
+        
+        // Clear edge highlights
+        this.svg.selectAll('.voronoi-edge')
+            .classed('edge-suggestion-1 edge-suggestion-2 edge-suggestion-3 edge-suggestion-4 edge-suggestion-5', false);
+    }
+
+    addMoveToAIHistory(edge, score) {
+        if (!this.aiEnabled) return;
+        
+        const moveNumber = this.aiMoveHistory.length + 1;
+        const edgeLabel = this.getEdgeLabel(edge);
+        
+        this.aiMoveHistory.push({
+            moveNumber,
+            edgeLabel,
+            edgeId: edge.id,
+            score,
+            timestamp: new Date().toLocaleTimeString()
+        });
+        
+        this.updateAIMoveHistoryDisplay();
+    }
+
+    updateAIMoveHistoryDisplay() {
+        const container = document.getElementById('aiMoveHistory');
+        if (!container) return;
+        
+        if (this.aiMoveHistory.length === 0) {
+            container.innerHTML = '<p class="placeholder-text">No AI moves yet</p>';
+            return;
+        }
+        
+        // Show last 10 moves, most recent first
+        const recentMoves = this.aiMoveHistory.slice(-10).reverse();
+        
+        container.innerHTML = recentMoves.map(move => `
+            <div class="move-history-item">
+                <span class="move-number">#${move.moveNumber}</span>
+                <span class="move-edge" title="${move.edgeId}">${move.edgeLabel}</span>
+                <span class="move-score">+${move.score}</span>
+            </div>
+        `).join('');
+    }
+
 }
 
 // Initialize the AI game when the page loads

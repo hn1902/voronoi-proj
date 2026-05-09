@@ -542,6 +542,83 @@ class MCTSAI:
         
         return best_child.action_taken if best_child else valid_actions[0]
     
+    def get_top_moves(self, game_state: GameStateSnapshot, top_n: int = 5) -> List[Dict]:
+        """
+        Get top N best moves using MCTS with rankings.
+        
+        Args:
+            game_state: Current game state snapshot
+            top_n: Number of top moves to return
+            
+        Returns:
+            List of dictionaries with move info:
+            [
+                {
+                    'action': edge_index,
+                    'edge_id': edge_id,
+                    'visits': visit_count,
+                    'confidence': confidence_percentage,
+                    'expected_reward': average_reward,
+                    'rank': 1, 2, 3, etc.
+                },
+                ...
+            ]
+        """
+        valid_actions = game_state.get_valid_actions()
+        
+        if not valid_actions:
+            return []
+        
+        if len(valid_actions) == 1:
+            edge = game_state.edges[valid_actions[0]]
+            return [{
+                'action': valid_actions[0],
+                'edge_id': edge['id'],
+                'visits': self.simulations,
+                'confidence': 100.0,
+                'expected_reward': 0.0,
+                'rank': 1
+            }]
+        
+        # Create root node
+        root = MCTSNode(game_state.clone())
+        
+        # Run MCTS simulations
+        for i in range(self.simulations):
+            # 1. SELECTION
+            node = self._select(root)
+            
+            # 2. EXPANSION
+            if not node.is_terminal() and not node.is_fully_expanded():
+                node = node.expand()
+            
+            # 3. SIMULATION (ROLLOUT)
+            reward = self._rollout(node.state)
+            
+            # 4. BACKPROPAGATION
+            self._backpropagate(node, reward)
+        
+        # Rank all children by visit count
+        ranked_children = sorted(root.children, key=lambda c: c.visits, reverse=True)
+        
+        # Build results
+        results = []
+        for rank, child in enumerate(ranked_children[:top_n], 1):
+            edge = game_state.edges[child.action_taken]
+            confidence = (child.visits / root.visits) * 100 if root.visits > 0 else 0
+            expected_reward = child.total_reward / child.visits if child.visits > 0 else 0
+            
+            results.append({
+                'action': child.action_taken,
+                'edge_id': edge['id'],
+                'visits': child.visits,
+                'confidence': round(confidence, 1),
+                'expected_reward': round(expected_reward, 3),
+                'rank': rank
+            })
+        
+        return results
+    
     def _select(self, node: MCTSNode) -> MCTSNode:
         """Selection phase: traverse tree using UCB until leaf."""
         while not node.is_terminal() and node.is_fully_expanded():

@@ -62,6 +62,37 @@
             <div id="voronoiContainer" class="voronoi-container">
                 <svg id="voronoiSvg" width="800" height="600"></svg>
             </div>
+            
+            <!-- AI Suggestions Sidebar -->
+            <div id="aiSidebar" class="ai-sidebar" style="display: none;">
+                <div class="sidebar-section">
+                    <h3>🤖 AI Suggestions</h3>
+                    <div id="aiSuggestions" class="suggestions-list">
+                        <p class="placeholder-text">AI suggestions will appear on Player 2's turn</p>
+                    </div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <h3>📜 AI Move History</h3>
+                    <div id="aiMoveHistory" class="move-history">
+                        <p class="placeholder-text">No AI moves yet</p>
+                    </div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <h3>⚙️ AI Settings</h3>
+                    <div class="ai-settings">
+                        <label for="simulationCount">Simulations:</label>
+                        <select id="simulationCount">
+                            <option value="100">100 (Fast)</option>
+                            <option value="500" selected>500 (Balanced)</option>
+                            <option value="1000">1000 (Strong)</option>
+                            <option value="2000">2000 (Expert)</option>
+                        </select>
+                        <button id="refreshSuggestions" class="btn btn-small">Refresh</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="game-actions">

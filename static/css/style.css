@@ -417,3 +417,214 @@ input:checked + .toggle-slider::before {
         max-width: 300px;
     }
 }
+
+/* AI Sidebar Styles */
+.game-area {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.ai-sidebar {
+    width: 280px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: var(--shadow);
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.ai-sidebar h3 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    color: var(--text-color);
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 8px;
+}
+
+.sidebar-section {
+    margin-bottom: 20px;
+}
+
+.sidebar-section:last-child {
+    margin-bottom: 0;
+}
+
+.suggestions-list, .move-history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.suggestion-item:hover {
+    background: var(--primary-color);
+    color: white;
+    transform: translateX(3px);
+}
+
+.suggestion-rank {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 12px;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+.suggestion-rank.rank-1 {
+    background: #22c55e;
+    color: white;
+}
+
+.suggestion-rank.rank-2 {
+    background: #84cc16;
+    color: white;
+}
+
+.suggestion-rank.rank-3 {
+    background: #eab308;
+    color: white;
+}
+
+.suggestion-rank.rank-4,
+.suggestion-rank.rank-5 {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.suggestion-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.suggestion-edge {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.suggestion-confidence {
+    font-size: 11px;
+    opacity: 0.8;
+    margin-top: 2px;
+}
+
+.move-history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.move-number {
+    font-weight: bold;
+    color: var(--primary-color);
+    min-width: 30px;
+}
+
+.move-edge {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.move-score {
+    font-weight: bold;
+    color: var(--player2-color);
+    min-width: 40px;
+    text-align: right;
+}
+
+.ai-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ai-settings label {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.ai-settings select {
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-size: 13px;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.placeholder-text {
+    color: var(--secondary-color);
+    font-style: italic;
+    font-size: 13px;
+    text-align: center;
+    padding: 15px;
+}
+
+/* Edge highlight classes */
+.edge-suggestion-1 {
+    stroke: #22c55e !important;
+    stroke-width: 5 !important;
+    filter: drop-shadow(0 0 3px #22c55e);
+}
+
+.edge-suggestion-2 {
+    stroke: #84cc16 !important;
+    stroke-width: 4 !important;
+}
+
+.edge-suggestion-3 {
+    stroke: #eab308 !important;
+    stroke-width: 4 !important;
+}
+
+.edge-suggestion-4,
+.edge-suggestion-5 {
+    stroke: #a855f7 !important;
+    stroke-width: 3 !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1100px) {
+    .game-area {
+        flex-direction: column;
+    }
+    
+    .ai-sidebar {
+        width: 100%;
+        max-height: none;
+    }
+}

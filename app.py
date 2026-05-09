@@ -4,7 +4,7 @@ import torch
 import os
 from dqn_agent import DQNAgent, VoronoiAI
 from rl_environment import VoronoiRLEnvironment
-from mcts_ai import MCTSAI, GameStateSnapshot, create_state_from_game_data
+from mcts_ai import MCTSAI, GameStateSnapshot, create_state_from_game
 
 app = Flask(__name__)
 
@@ -274,18 +274,6 @@ def mcts_stats():
             'debug': mcts_ai.debug
         }
     })
-
-
-def create_state_from_game_data(points, edges, claimed_edges, current_player, player1_score, player2_score):
-    """Helper function to create GameStateSnapshot from raw data"""
-    return GameStateSnapshot(
-        points=points,
-        edges=edges,
-        claimed_edges=claimed_edges,
-        current_player=current_player,
-        player1_score=player1_score,
-        player2_score=player2_score
-    )
 
 
 if __name__ == '__main__':

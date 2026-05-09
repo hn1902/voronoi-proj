@@ -212,9 +212,9 @@ class VoronoiAIGame {
             .attr('y1', d => d.y1)
             .attr('x2', d => d.x2)
             .attr('y2', d => d.y2)
-            .on('click', (event, d) => {
+            .on('click', async (event, d) => {
                 if (!this.aiEnabled || this.currentPlayer === 1) {
-                    this.claimEdge(d);
+                    await this.claimEdge(d);
                 }
             })
             .on('mouseover', (event, d) => {
@@ -286,7 +286,7 @@ class VoronoiAIGame {
         return `${coords[0][0]},${coords[0][1]}-${coords[1][0]},${coords[1][1]}`;
     }
 
-    claimEdge(edge) {
+    async claimEdge(edge) {
         if (!this.gameActive || edge.claimed || this.aiThinking) return;
 
         // Track score before move for AI history
@@ -318,7 +318,7 @@ class VoronoiAIGame {
         // Clear AI suggestions after any move
         this.clearSuggestions();
         
-        this.switchPlayer();
+        await this.switchPlayer();
         this.checkGameEnd();
     }
 
@@ -381,7 +381,7 @@ class VoronoiAIGame {
                 this.showStatus('AI error: ' + (result.error || 'Unknown error'), 'error');
                 
                 // Fallback to simple heuristic if MCTS fails
-                this.fallbackAIMove();
+                await this.fallbackAIMove();
             }
             
         } catch (error) {
@@ -389,20 +389,20 @@ class VoronoiAIGame {
             this.showStatus('AI connection error, using fallback', 'warning');
             
             // Fallback to simple heuristic
-            this.fallbackAIMove();
+            await this.fallbackAIMove();
         }
         
         this.aiThinking = false;
     }
 
-    fallbackAIMove() {
+    async fallbackAIMove() {
         // Fallback simple heuristic when MCTS fails
         const availableEdges = this.edges.filter(edge => !edge.claimed);
         
         if (availableEdges.length > 0) {
             // Simple strategy: prioritize edges that might form polygons
             let selectedEdge = this.selectBestEdgeFallback(availableEdges);
-            this.claimEdge(selectedEdge);
+            await this.claimEdge(selectedEdge);
         }
     }
 
@@ -561,7 +561,7 @@ class VoronoiAIGame {
         return Array.from(foundCycles).map(cycleKey => cycleKey.split('-'));
     }
 
-    switchPlayer() {
+    async switchPlayer() {
         this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
         document.getElementById('currentPlayerText').textContent = 
             this.aiEnabled ? 
@@ -573,8 +573,10 @@ class VoronoiAIGame {
         }
         
         // If AI mode enabled and it's Player 2's turn, fetch suggestions
+        console.log('Switching to player:', this.currentPlayer, 'AI enabled:', this.aiEnabled, 'Game active:', this.gameActive);
         if (this.aiEnabled && this.currentPlayer === 2 && this.gameActive) {
-            this.fetchAISuggestions();
+            console.log('Fetching AI suggestions...');
+            await this.fetchAISuggestions();
         } else {
             // Clear suggestions when it's not AI's turn
             this.clearSuggestions();
@@ -586,12 +588,12 @@ class VoronoiAIGame {
         this.timeRemaining = 60;
         this.updateTimerDisplay();
         
-        this.timerInterval = setInterval(() => {
+        this.timerInterval = setInterval(async () => {
             this.timeRemaining--;
             this.updateTimerDisplay();
             
             if (this.timeRemaining <= 0) {
-                this.timeUp();
+                await this.timeUp();
             }
         }, 1000);
     }
@@ -610,9 +612,9 @@ class VoronoiAIGame {
             `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
-    timeUp() {
+    async timeUp() {
         this.stopTimer();
-        this.switchPlayer();
+        await this.switchPlayer();
         this.showStatus(`Time's up! ${this.aiEnabled ? 'AI' : `Player ${this.currentPlayer === 1 ? 2 : 1}`} gets another turn.`, 'warning');
     }
 
@@ -704,10 +706,27 @@ class VoronoiAIGame {
     }
 
     async fetchAISuggestions() {
-        if (!this.aiEnabled || this.currentPlayer !== 2 || !this.gameActive) return;
+        console.log('fetchAISuggestions called:', {
+            aiEnabled: this.aiEnabled,
+            currentPlayer: this.currentPlayer,
+            gameActive: this.gameActive,
+            edgesCount: this.edges?.length,
+            claimedCount: this.claimedEdges?.size
+        });
+        
+        if (!this.aiEnabled || this.currentPlayer !== 2 || !this.gameActive) {
+            console.log('Early return - conditions not met');
+            return;
+        }
         
         this.aiThinking = true;
         this.showStatus('MCTS AI is analyzing... Running simulations', 'info');
+        
+        // Update UI to show loading state
+        const container = document.getElementById('aiSuggestions');
+        if (container) {
+            container.innerHTML = '<p class="placeholder-text">🤖 AI is thinking...</p>';
+        }
         
         try {
             const gameState = {
@@ -721,27 +740,39 @@ class VoronoiAIGame {
                 simulations: this.aiSimulationCount
             };
             
+            console.log('Sending request to /api/mcts_suggestions with state:', gameState);
+            
             const response = await fetch('/api/mcts_suggestions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(gameState)
             });
             
+            console.log('Response status:', response.status);
+            
             const result = await response.json();
+            console.log('Response result:', result);
             
             if (response.ok && result.status === 'success') {
+                console.log('Got suggestions:', result.suggestions);
                 this.currentSuggestions = result.suggestions;
                 this.displaySuggestions(result.suggestions);
                 this.highlightSuggestedEdges(result.suggestions);
                 this.showStatus('AI suggestions ready! Click a highlighted edge or suggestion.', 'info');
             } else {
                 console.error('MCTS suggestions error:', result.error);
-                this.showStatus('AI analysis failed', 'error');
+                this.showStatus('AI analysis failed: ' + (result.error || 'Unknown error'), 'error');
+                if (container) {
+                    container.innerHTML = '<p class="placeholder-text" style="color: #e74c3c;">Error: ' + (result.error || 'Unknown error') + '</p>';
+                }
             }
             
         } catch (error) {
             console.error('Error fetching AI suggestions:', error);
-            this.showStatus('AI connection error', 'error');
+            this.showStatus('AI connection error: ' + error.message, 'error');
+            if (container) {
+                container.innerHTML = '<p class="placeholder-text" style="color: #e74c3c;">Connection error</p>';
+            }
         }
         
         this.aiThinking = false;
@@ -772,11 +803,11 @@ class VoronoiAIGame {
         
         // Add click handlers to suggestion items
         container.querySelectorAll('.suggestion-item').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', async () => {
                 const edgeIndex = parseInt(item.dataset.edgeIndex);
                 const edge = this.edges[edgeIndex];
                 if (edge && !edge.claimed) {
-                    this.claimEdge(edge);
+                    await this.claimEdge(edge);
                 }
             });
         });

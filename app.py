@@ -32,8 +32,18 @@ def initialize_ai():
     state_encoder = StateEncoder()
     
     # Try to load trained model, otherwise create new one
-    model_path = 'models/best_model.pth'
-    if os.path.exists(model_path):
+    # Check for iter checkpoints first, then best_model
+    model_path = None
+    if os.path.exists('models'):
+        iter_models = [f for f in os.listdir('models') if f.startswith('model_iter_') and f.endswith('.pth')]
+        if iter_models:
+            # Get latest iteration
+            latest = sorted(iter_models, key=lambda x: int(x.split('_')[2].split('.')[0]))[-1]
+            model_path = os.path.join('models', latest)
+        elif os.path.exists('models/best_model.pth'):
+            model_path = 'models/best_model.pth'
+    
+    if model_path and os.path.exists(model_path):
         print(f"Loading trained AlphaZero model from {model_path}")
         az_model = load_trained_model(model_path)
     else:

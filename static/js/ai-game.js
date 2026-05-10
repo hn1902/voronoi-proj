@@ -16,6 +16,7 @@ class VoronoiAIGame {
         this.timeRemaining = 60;
         this.tooltip = null;
         this.aiEnabled = false;
+        this.azEnabled = false;  // AlphaZero mode
         this.aiThinking = false;
         
         // AI Suggestion Mode properties
@@ -36,6 +37,7 @@ class VoronoiAIGame {
 
         // AI toggle
         const aiToggle = document.getElementById('aiToggle');
+        const azToggleSection = document.getElementById('azToggleSection');
         if (aiToggle) {
             aiToggle.addEventListener('change', async (e) => {
                 this.aiEnabled = e.target.checked;
@@ -43,6 +45,11 @@ class VoronoiAIGame {
                 this.resetGame();
                 this.aiMoveHistory = [];  // Clear history on new game
                 this.updateAIMoveHistoryDisplay();
+                
+                // Show/hide AlphaZero toggle
+                if (azToggleSection) {
+                    azToggleSection.style.display = this.aiEnabled ? 'block' : 'none';
+                }
                 
                 if (this.aiEnabled) {
                     this.showStatus('AI Advisor mode enabled! Testing backend connection...', 'info');
@@ -56,6 +63,23 @@ class VoronoiAIGame {
                 } else {
                     this.showStatus('AI mode disabled.', 'info');
                 }
+            });
+        }
+        
+        // AlphaZero toggle
+        const azToggle = document.getElementById('azToggle');
+        if (azToggle) {
+            azToggle.addEventListener('change', (e) => {
+                this.azEnabled = e.target.checked;
+                const mode = this.azEnabled ? 'AlphaZero' : 'Heuristic MCTS';
+                this.showStatus(`AI mode switched to: ${mode}`, 'info');
+                // Update sidebar title
+                const sidebar = document.getElementById('aiSidebar');
+                const titleEl = sidebar?.querySelector('h3');
+                if (titleEl) {
+                    titleEl.textContent = `🤖 ${this.azEnabled ? 'AlphaZero' : 'AI'} Suggestions`;
+                }
+                this.resetGame();
             });
         }
 
@@ -338,10 +362,12 @@ class VoronoiAIGame {
         if (!this.aiEnabled || this.currentPlayer !== 2 || this.aiThinking) return;
         
         this.aiThinking = true;
-        this.showStatus('MCTS AI is thinking... Running 500 simulations', 'info');
+        const modeLabel = this.azEnabled ? 'AlphaZero' : 'MCTS';
+        const simCount = this.azEnabled ? 200 : 500;
+        this.showStatus(`${modeLabel} AI is thinking... Running ${simCount} simulations`, 'info');
         
         try {
-            // Prepare game state for MCTS AI
+            // Prepare game state for AI
             const gameState = {
                 points: this.points,
                 edges: this.edges,
@@ -349,11 +375,12 @@ class VoronoiAIGame {
                 current_player: this.currentPlayer,
                 player1_score: this.player1Score,
                 player2_score: this.player2Score,
-                simulations: 500  // Configurable number of MCTS simulations
+                simulations: simCount
             };
             
-            // Call MCTS backend API
-            const response = await fetch('/api/mcts_move', {
+            // Choose endpoint based on AZ mode
+            const endpoint = this.azEnabled ? '/api/az_move' : '/api/mcts_move';
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -742,6 +769,12 @@ class VoronoiAIGame {
         if (sidebar) {
             sidebar.style.display = show ? 'block' : 'none';
         }
+        // Update sidebar title based on AZ mode
+        const titleEl = sidebar?.querySelector('h3');
+        if (titleEl) {
+            const mode = this.azEnabled ? 'AlphaZero' : 'AI';
+            titleEl.textContent = `🤖 ${mode} Suggestions`;
+        }
     }
 
     async fetchAISuggestions() {
@@ -759,12 +792,13 @@ class VoronoiAIGame {
         }
         
         this.aiThinking = true;
-        this.showStatus('MCTS AI is analyzing... Running simulations', 'info');
+        const modeLabel = this.azEnabled ? 'AlphaZero' : 'MCTS';
+        this.showStatus(`${modeLabel} AI is analyzing... Running simulations`, 'info');
         
         // Update UI to show loading state
         const container = document.getElementById('aiSuggestions');
         if (container) {
-            container.innerHTML = '<p class="placeholder-text">🤖 AI is thinking...</p>';
+            container.innerHTML = `<p class="placeholder-text">🤖 ${modeLabel} is thinking...</p>`;
         }
         
         try {
@@ -779,7 +813,9 @@ class VoronoiAIGame {
                 simulations: this.aiSimulationCount
             };
             
-            console.log('Sending request to /api/mcts_suggestions with state:', gameState);
+            // Choose endpoint based on AZ mode
+            const endpoint = this.azEnabled ? '/api/az_suggestions' : '/api/mcts_suggestions';
+            console.log(`Sending request to ${endpoint} with state:`, gameState);
             
             // Create AbortController for timeout - scales with simulation count
             const controller = new AbortController();
@@ -787,7 +823,7 @@ class VoronoiAIGame {
             console.log(`Setting request timeout to ${timeoutMs}ms for ${this.aiSimulationCount} simulations`);
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             
-            const response = await fetch('/api/mcts_suggestions', {
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(gameState),

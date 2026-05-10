@@ -115,7 +115,10 @@ class SelfPlayEngine:
             
             # Select action based on probabilities (sampling)
             actions = list(action_probs.keys())
-            probs = list(action_probs.values())
+            probs = np.array(list(action_probs.values()), dtype=np.float64)
+            
+            # Normalize to ensure sum = 1 (floating point safety)
+            probs = probs / probs.sum()
             
             # Temperature-adjusted sampling
             if temp == 0:

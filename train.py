@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from torch.utils.data import Dataset, DataLoader
 
 from nn_model import VoronoiNet, create_model, load_trained_model
@@ -86,7 +86,7 @@ class VoronoiDataset(Dataset):
     
     def __getitem__(self, idx):
         ex = self.examples[idx]
-        return ex.state_tensor, ex.policy_target, ex.value_target
+        return ex.state_tensor, ex.policy_target, torch.tensor(ex.value_target, dtype=torch.float32)
 
 
 class Trainer:

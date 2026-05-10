@@ -318,26 +318,24 @@ class HeuristicRolloutPolicy:
     
     def select_move(self, state: GameStateSnapshot) -> int:
         """
-        Select move using weighted heuristics.
+        Select move using intelligent heuristics for better gameplay.
         Returns action index.
         """
         valid_actions = state.get_valid_actions()
         if not valid_actions:
             return -1
         
-        # Score each action
-        action_scores = []
-        
+        # Score each action with better heuristics
+        scored_actions = []
         for action in valid_actions:
-            score = self._evaluate_action(state, action)
-            action_scores.append((action, score))
+            score = self._evaluate_action_smart(state, action)
+            scored_actions.append((action, score))
         
         # Sort by score (descending)
-        action_scores.sort(key=lambda x: x[1], reverse=True)
+        scored_actions.sort(key=lambda x: x[1], reverse=True)
         
-        # Weighted probabilistic selection
-        # Top moves get higher probability
-        weights = [max(0.1, score) for _, score in action_scores]
+        # Weighted probabilistic selection - better moves get higher probability
+        weights = [max(0.1, score) for _, score in scored_actions]
         total_weight = sum(weights)
         
         if total_weight == 0:
@@ -346,12 +344,87 @@ class HeuristicRolloutPolicy:
         # Select based on weights
         r = random.uniform(0, total_weight)
         cumulative = 0
-        for action, weight in action_scores:
+        for action, weight in scored_actions:
             cumulative += weight
             if r <= cumulative:
                 return action
         
-        return action_scores[-1][0]
+        return scored_actions[0][0]
+    
+    def _evaluate_action_smart(self, state: GameStateSnapshot, action: int) -> float:
+        """
+        Smart evaluation using key heuristics for Voronoi game.
+        """
+        score = 1.0  # Base score
+        current_player = state.current_player
+        opponent = 3 - current_player
+        
+        # HEURISTIC 1: Check if move completes polygon (HIGHEST PRIORITY)
+        if self._completes_polygon_fast(state, action, current_player):
+            score += 1000.0  # Very high priority
+        
+        # HEURISTIC 2: Avoid moves that let opponent complete polygon next turn
+        temp_state = state.clone()
+        temp_state.apply_action(action)
+        opponent_actions = temp_state.get_valid_actions()
+        
+        for opp_action in opponent_actions:
+            if self._completes_polygon_fast(temp_state, opp_action, opponent):
+                score -= 500.0  # Strongly avoid
+                break
+        
+        # HEURISTIC 3: Prefer moves that create potential for future polygons
+        connected_edges = self._count_connected_edges_fast(state, action)
+        score += connected_edges * 10.0  # Higher bonus for connectivity
+        
+        # HEURISTIC 4: Prefer edges that create more opportunities (degree analysis)
+        edge = state.edges[action]
+        v1 = f"{edge['x1']},{edge['y1']}"
+        v2 = f"{edge['x2']},{edge['y2']}"
+        
+        # Count unclaimed edges connected to this edge
+        unclaimed_neighbors = 0
+        for other_edge in state.edges:
+            if other_edge['id'] not in state.claimed_edges:
+                other_v1 = f"{other_edge['x1']},{other_edge['y1']}"
+                other_v2 = f"{other_edge['x2']},{other_edge['y2']}"
+                if v1 in (other_v1, other_v2) or v2 in (other_v1, other_v2):
+                    unclaimed_neighbors += 1
+        
+        score += unclaimed_neighbors * 5.0  # Bonus for creating future options
+        
+        # HEURISTIC 5: Small random factor for exploration
+        score += random.random() * 3.0
+        
+        return max(score, 0.1)  # Ensure positive weight
+    
+    def _completes_polygon_fast(self, state: GameStateSnapshot, action: int, player: int) -> bool:
+        """
+        Fast polygon completion check without expensive DFS.
+        Uses simple heuristics to detect likely polygon completion.
+        """
+        temp_state = state.clone()
+        temp_state.apply_action(action)
+        
+        # Quick check: if player has very few edges, unlikely to complete polygon
+        player_edges = [eid for eid, pid in temp_state.claimed_edges.items() if pid == player]
+        if len(player_edges) < 3:
+            return False
+        
+        # Use the expensive check only when necessary
+        polygons = temp_state._find_polygons_for_player(player)
+        
+        if not polygons:
+            return False
+        
+        # Check if the newly claimed edge is part of any polygon
+        edge = temp_state.edges[action]
+        for polygon in polygons:
+            polygon_edges = temp_state._get_polygon_edge_ids(polygon)
+            if edge['id'] in polygon_edges:
+                return True
+        
+        return False
     
     def _evaluate_action(self, state: GameStateSnapshot, action: int) -> float:
         """
@@ -415,6 +488,12 @@ class HeuristicRolloutPolicy:
                 return True
         
         return False
+    
+    def _count_connected_edges_fast(self, state: GameStateSnapshot, action: int) -> int:
+        """Fast version that doesn't require player parameter - for rollout speed."""
+        edge = state.edges[action]
+        current_player = state.current_player
+        return self._count_connected_edges(state, action, current_player)
     
     def _count_connected_edges(self, state: GameStateSnapshot, action: int, player: int) -> int:
         """Count how many of player's edges connect to this edge."""
@@ -583,20 +662,48 @@ class MCTSAI:
         # Create root node
         root = MCTSNode(game_state.clone())
         
+        import time
+        start_time = time.time()
+        # Time limit scales with simulation count (0.1s per simulation, min 5s, max 300s)
+        max_time = max(5, min(300, self.simulations * 0.1))
+        
+        print(f"Starting MCTS with max {self.simulations} simulations, time limit {max_time:.1f}s")
+        
+        completed_sims = 0
+        
         # Run MCTS simulations
         for i in range(self.simulations):
-            # 1. SELECTION
-            node = self._select(root)
+            # Check time limit
+            elapsed = time.time() - start_time
+            if elapsed > max_time:
+                print(f"MCTS time limit reached after {i} simulations ({elapsed:.2f}s)")
+                break
             
-            # 2. EXPANSION
-            if not node.is_terminal() and not node.is_fully_expanded():
-                node = node.expand()
+            # Progress logging every 100 simulations
+            if self.debug and i % 100 == 0:
+                print(f"MCTS Progress: {i}/{self.simulations} simulations, {elapsed:.2f}s elapsed")
             
-            # 3. SIMULATION (ROLLOUT)
-            reward = self._rollout(node.state)
-            
-            # 4. BACKPROPAGATION
-            self._backpropagate(node, reward)
+            try:
+                # 1. SELECTION
+                node = self._select(root)
+                
+                # 2. EXPANSION
+                if not node.is_terminal() and not node.is_fully_expanded():
+                    node = node.expand()
+                
+                # 3. SIMULATION (ROLLOUT)
+                reward = self._rollout(node.state)
+                
+                # 4. BACKPROPAGATION
+                self._backpropagate(node, reward)
+                completed_sims += 1
+                
+            except Exception as e:
+                print(f"Error in simulation {i}: {e}")
+                continue
+        
+        total_time = time.time() - start_time
+        print(f"MCTS Complete: {completed_sims}/{self.simulations} simulations in {total_time:.2f}s")
         
         # Rank all children by visit count
         ranked_children = sorted(root.children, key=lambda c: c.visits, reverse=True)
@@ -625,18 +732,29 @@ class MCTSAI:
             node = node.best_child(self.c)
         return node
     
-    def _rollout(self, state: GameStateSnapshot) -> float:
+    def _rollout(self, state: GameStateSnapshot, max_steps: int = 100) -> float:
         """
         Simulation phase: play out game using heuristic policy.
         Returns reward from AI player's perspective.
         """
-        sim_state = state.clone()
+        import time
+        start_time = time.time()
         
-        while not sim_state.is_terminal():
+        sim_state = state.clone()
+        step_count = 0
+        
+        while not sim_state.is_terminal() and step_count < max_steps:
             action = self.rollout_policy.select_move(sim_state)
             if action == -1:
+                print(f"Rollout: No valid actions at step {step_count}, terminating early")
                 break
             sim_state.apply_action(action)
+            step_count += 1
+            
+            # Safety check - if rollout takes too long, abort
+            if time.time() - start_time > 0.5:  # 500ms max per rollout
+                print(f"Rollout timeout at step {step_count}")
+                break
         
         # Calculate reward
         winner = sim_state.get_winner()

@@ -22,7 +22,7 @@ class VoronoiAIGame {
         this.aiMoveHistory = [];  // Track AI's move history
         this.currentSuggestions = [];  // Current AI suggestions
         this.suggestionMode = 'advisor';  // 'advisor' = show suggestions, 'auto' = AI plays
-        this.aiSimulationCount = 500;
+        this.aiSimulationCount = 100;  // Default to 100 for responsiveness
         
         this.initializeEventListeners();
         this.createTooltip();
@@ -37,13 +37,25 @@ class VoronoiAIGame {
         // AI toggle
         const aiToggle = document.getElementById('aiToggle');
         if (aiToggle) {
-            aiToggle.addEventListener('change', (e) => {
+            aiToggle.addEventListener('change', async (e) => {
                 this.aiEnabled = e.target.checked;
                 this.toggleAISidebar(this.aiEnabled);
                 this.resetGame();
                 this.aiMoveHistory = [];  // Clear history on new game
                 this.updateAIMoveHistoryDisplay();
-                this.showStatus(this.aiEnabled ? 'AI Advisor mode enabled! You are Player 1. AI will suggest moves for Player 2.' : 'AI mode disabled.', 'info');
+                
+                if (this.aiEnabled) {
+                    this.showStatus('AI Advisor mode enabled! Testing backend connection...', 'info');
+                    // Test backend connectivity
+                    const connected = await this.testBackendConnection();
+                    if (connected) {
+                        this.showStatus('AI Advisor mode enabled! You are Player 1. AI will suggest moves for Player 2.', 'info');
+                    } else {
+                        this.showStatus('AI mode enabled but backend connection failed!', 'error');
+                    }
+                } else {
+                    this.showStatus('AI mode disabled.', 'info');
+                }
             });
         }
 
@@ -698,6 +710,33 @@ class VoronoiAIGame {
 
     // ==================== AI SIDEBAR & SUGGESTION METHODS ====================
 
+    async testBackendConnection() {
+        console.log('Testing backend connection...');
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const response = await fetch('/api/ping', {
+                method: 'GET',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Backend ping successful:', result);
+                return true;
+            } else {
+                console.error('Backend ping failed:', response.status);
+                return false;
+            }
+        } catch (error) {
+            console.error('Backend connection test failed:', error);
+            return false;
+        }
+    }
+
     toggleAISidebar(show) {
         const sidebar = document.getElementById('aiSidebar');
         if (sidebar) {
@@ -742,13 +781,23 @@ class VoronoiAIGame {
             
             console.log('Sending request to /api/mcts_suggestions with state:', gameState);
             
+            // Create AbortController for timeout - scales with simulation count
+            const controller = new AbortController();
+            const timeoutMs = Math.max(10000, Math.min(300000, this.aiSimulationCount * 150)); // 150ms per sim, min 10s, max 5 minutes
+            console.log(`Setting request timeout to ${timeoutMs}ms for ${this.aiSimulationCount} simulations`);
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            
             const response = await fetch('/api/mcts_suggestions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(gameState)
+                body: JSON.stringify(gameState),
+                signal: controller.signal
             });
             
+            clearTimeout(timeoutId);
+            
             console.log('Response status:', response.status);
+            console.log('Response headers:', [...response.headers.entries()]);
             
             const result = await response.json();
             console.log('Response result:', result);
@@ -769,9 +818,19 @@ class VoronoiAIGame {
             
         } catch (error) {
             console.error('Error fetching AI suggestions:', error);
-            this.showStatus('AI connection error: ' + error.message, 'error');
-            if (container) {
-                container.innerHTML = '<p class="placeholder-text" style="color: #e74c3c;">Connection error</p>';
+            console.error('Error name:', error.name);
+            console.error('Error message:', error.message);
+            
+            if (error.name === 'AbortError') {
+                this.showStatus('AI analysis timed out (30s)', 'error');
+                if (container) {
+                    container.innerHTML = '<p class="placeholder-text" style="color: #e74c3c;">Request timed out</p>';
+                }
+            } else {
+                this.showStatus('AI connection error: ' + error.message, 'error');
+                if (container) {
+                    container.innerHTML = '<p class="placeholder-text" style="color: #e74c3c;">Connection error: ' + error.message + '</p>';
+                }
             }
         }
         

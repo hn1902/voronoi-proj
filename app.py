@@ -470,7 +470,8 @@ def az_train():
         return jsonify({'error': str(e)}), 500
 
 
+# Initialize AI on module load (needed for gunicorn/WSGI)
+initialize_ai()
+
 if __name__ == '__main__':
-    # Initialize AI when starting the app
-    initialize_ai()
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -35,6 +35,14 @@ class VoronoiAIGame {
             this.generateVoronoi();
         });
 
+        // Load Fixed Board button
+        const loadFixedBtn = document.getElementById('loadFixedBtn');
+        if (loadFixedBtn) {
+            loadFixedBtn.addEventListener('click', () => {
+                this.loadFixedBoard();
+            });
+        }
+
         // AI toggle
         const aiToggle = document.getElementById('aiToggle');
         const azToggleSection = document.getElementById('azToggleSection');
@@ -153,6 +161,86 @@ class VoronoiAIGame {
         this.createVoronoiDiagram();
         this.setupGame();
         this.showStatus(this.aiEnabled ? 'Game started! You are Player 1 (Red).' : 'Game started! Click on edges to claim them.', 'info');
+    }
+
+    async loadFixedBoard() {
+        try {
+            const response = await fetch('/api/fixed_board');
+            const data = await response.json();
+            
+            this.clearSVG();
+            this.points = data.points;
+            
+            // Format edges to match what frontend expects using its own ID generator
+            this.edges = data.edges.map(e => {
+                const id = this.getEdgeId({x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2});
+                return {
+                    id: id,
+                    x1: e.x1,
+                    y1: e.y1,
+                    x2: e.x2,
+                    y2: e.y2,
+                    claimed: false,
+                    player: null
+                };
+            });
+            
+            // Draw edges directly
+            this.svg.selectAll('.voronoi-edge')
+                .data(this.edges)
+                .enter()
+                .append('line')
+                .attr('class', 'voronoi-edge')
+                .attr('x1', d => d.x1)
+                .attr('y1', d => d.y1)
+                .attr('x2', d => d.x2)
+                .attr('y2', d => d.y2)
+                .on('click', async (event, d) => {
+                    if (!this.aiEnabled || this.currentPlayer === 1) {
+                        await this.claimEdge(d);
+                    }
+                })
+                .on('mouseover', (event, d) => {
+                    if (!d.claimed && (!this.aiEnabled || this.currentPlayer === 1)) {
+                        d3.select(event.target)
+                            .style('stroke', this.currentPlayer === 1 ? '#e74c3c' : '#3498db')
+                            .style('stroke-width', 4);
+                    }
+                })
+                .on('mouseout', (event, d) => {
+                    if (!d.claimed) {
+                        d3.select(event.target)
+                            .style('stroke', '#999')
+                            .style('stroke-width', 2);
+                    }
+                });
+
+            // Draw points
+            this.svg.selectAll('.voronoi-point')
+                .data(this.points)
+                .enter()
+                .append('circle')
+                .attr('class', 'voronoi-point')
+                .attr('cx', d => d.x)
+                .attr('cy', d => d.y)
+                .on('mouseover', (event, d) => {
+                    this.tooltip
+                        .style('opacity', 1)
+                        .html(`Point ${d.id !== undefined ? d.id + 1 : ''}<br/>(${Math.round(d.x)}, ${Math.round(d.y)})`)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 10) + 'px');
+                })
+                .on('mouseout', () => {
+                    this.tooltip.style('opacity', 0);
+                });
+                
+            this.setupGame();
+            this.showStatus('Fixed AlphaZero Training Board Loaded! (12 edges)', 'info');
+            
+        } catch (error) {
+            console.error('Error loading fixed board:', error);
+            this.showStatus('Failed to load fixed board.', 'error');
+        }
     }
 
     generatePoints(count) {
@@ -819,7 +907,7 @@ class VoronoiAIGame {
             
             // Create AbortController for timeout - scales with simulation count
             const controller = new AbortController();
-            const timeoutMs = Math.max(10000, Math.min(300000, this.aiSimulationCount * 150)); // 150ms per sim, min 10s, max 5 minutes
+            const timeoutMs = Math.max(15000, Math.min(300000, this.aiSimulationCount * 500)); // 500ms per sim, min 15s, max 5 minutes
             console.log(`Setting request timeout to ${timeoutMs}ms for ${this.aiSimulationCount} simulations`);
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             

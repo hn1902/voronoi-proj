@@ -65,6 +65,11 @@ def initialize_ai():
 def index():
     return render_template('index.html')
 
+@app.route('/api/fixed_board', methods=['GET'])
+def fixed_board():
+    from fixed_board_config import get_fixed_board
+    return jsonify(get_fixed_board())
+
 # DQN endpoints - commented out (not currently used)
 # @app.route('/api/ai_move', methods=['POST'])
 # def ai_move():

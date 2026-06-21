@@ -78,8 +78,13 @@ class DQNAgent:
             return random.choice(valid_actions) if valid_actions else 0
         
         # Exploit: choose best valid action
+        # Truncate if state exceeds expected size
+        if len(state) > self.state_size:
+            import logging
+            logging.warning(f"State length {len(state)} exceeds state_size {self.state_size}; truncating.")
+            state = state[:self.state_size]
         # Pad state to match expected input size
-        padded_state = np.pad(state, (0, max(0, self.action_size + 5 - len(state))), 'constant')
+        padded_state = np.pad(state, (0, max(0, self.state_size - len(state))), 'constant')
         state_tensor = torch.FloatTensor(padded_state).unsqueeze(0).to(self.device)
         
         # Get Q values for available actions only
@@ -100,14 +105,13 @@ class DQNAgent:
         # Sample random batch from memory
         batch = random.sample(self.memory, self.batch_size)
         
-        # Pad states to same length
-        max_state_len = max(len(e[0]) for e in batch)
+        # Pad states to fixed state_size for consistent tensor shapes
         padded_states = []
         padded_next_states = []
         
         for e in batch:
-            state = np.pad(e[0], (0, max_state_len - len(e[0])), 'constant')
-            next_state = np.pad(e[3], (0, max_state_len - len(e[3])), 'constant')
+            state = np.pad(e[0], (0, max(0, self.state_size - len(e[0]))), 'constant')[:self.state_size]
+            next_state = np.pad(e[3], (0, max(0, self.state_size - len(e[3]))), 'constant')[:self.state_size]
             padded_states.append(state)
             padded_next_states.append(next_state)
         
@@ -121,6 +125,8 @@ class DQNAgent:
         current_q_values = self.q_network(states).gather(1, actions.unsqueeze(1))
         
         # Get next Q values from target network
+        # NOTE: This does not mask illegal actions for next_state. Known limitation
+        # that can inflate target Q-values. See fixed_dqn_agent.py for the active path.
         next_q_values = self.target_network(next_states).max(1)[0].detach()
         target_q_values = rewards + (self.gamma * next_q_values * ~dones)
         

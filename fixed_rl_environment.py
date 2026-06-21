@@ -21,6 +21,19 @@ class FixedVoronoiRLEnvironment:
         self.width = board['width']
         self.height = board['height']
         
+        self._edge_map = {e['id']: e for e in self.edges}
+        
+        # Build coordinate-to-edge-id mapping
+        self._coord_to_edge_id = {}
+        for edge in self.edges:
+            x1, y1 = edge['x1'], edge['y1']
+            x2, y2 = edge['x2'], edge['y2']
+            v1 = f"{x1},{y1}"
+            v2 = f"{x2},{y2}"
+            coords = sorted([v1, v2])
+            coord_key = f"{coords[0]}-{coords[1]}"
+            self._coord_to_edge_id[coord_key] = edge['id']
+            
         # Game state
         self.reset()
         
@@ -125,66 +138,57 @@ class FixedVoronoiRLEnvironment:
         return next_state, reward, self.game_over, info
     
     def _calculate_reward(self, action: int) -> float:
-        """Calculate reward for claiming an edge"""
+        """Calculate reward for claiming an edge.
+        
+        Canonical scoring rule (matches ai-game.js):
+        - Non-polygon edges: 1 point each
+        - Polygon edges: 4 points each
+        
+        Since this is incremental, when a polygon closes we retroactively
+        credit ALL k edges in it: bonus = 3 * k (upgrading each from 1pt to 4pt).
+        We detect new polygons by comparing polygon count before vs after.
+        """
         edge = self.edges[action]
         
         # Base reward for claiming an edge
         reward = 1.0
         
-        # Check if this edge forms a polygon
+        # Get player's edges INCLUDING the newly claimed one
         player_edges = [eid for eid, player in self.claimed_edges.items() 
                        if player == self.current_player]
         
-        if self._forms_polygon(player_edges, edge['id']):
-            reward += 4.0  # Bonus for forming polygon
+        # Find polygons after claiming this edge
+        polygons_after = self._find_polygons(player_edges)
+        
+        # Find polygons without this edge (before claiming)
+        player_edges_before = [eid for eid in player_edges if eid != edge['id']]
+        polygons_before = self._find_polygons(player_edges_before)
+        
+        # Check for newly completed polygons
+        new_polygon_count = len(polygons_after) - len(polygons_before)
+        if new_polygon_count > 0:
+            # Find which polygons are new (contain the new edge)
+            for polygon in polygons_after:
+                polygon_edge_ids = self._get_polygon_edge_ids(polygon)
+                if edge['id'] in polygon_edge_ids:
+                    # Retroactive bonus: upgrade ALL k edges from 1pt -> 4pt
+                    k = len(polygon_edge_ids)
+                    reward += 3.0 * k
         
         return reward
     
-    def _forms_polygon(self, player_edges: List[str], new_edge_id: str) -> bool:
-        """Check if adding this edge forms a polygon"""
-        if len(player_edges) < 3:
-            return False
-        
-        # Build adjacency map
-        edge_map = {}
-        for edge_id in player_edges:
-            edge = next(e for e in self.edges if e['id'] == edge_id)
-            v1 = f"{edge['x1']},{edge['y1']}"
-            v2 = f"{edge['x2']},{edge['y2']}"
-            
-            if v1 not in edge_map:
-                edge_map[v1] = []
-            if v2 not in edge_map:
-                edge_map[v2] = []
-            
-            edge_map.get(v1, []).append(v2)
-            edge_map.get(v2, []).append(v1)
-        
-        # Simple cycle detection
-        visited = set()
-        
-        def dfs(vertex, parent, depth):
-            if depth > 10:  # Prevent infinite recursion
-                return False
-            visited.add(vertex)
-            
-            for neighbor in edge_map.get(vertex, []):
-                if neighbor == parent:
-                    continue
-                if neighbor in visited:
-                    return True  # Found a cycle
-                if dfs(neighbor, vertex, depth + 1):
-                    return True
-            
-            return False
-        
-        # Check from any vertex
-        for vertex in edge_map:
-            if vertex not in visited:
-                if dfs(vertex, None, 0):
-                    return True
-        
-        return False
+    def _get_polygon_edge_ids(self, polygon):
+        """Convert polygon vertices to edge IDs."""
+        edge_ids = set()
+        for i in range(len(polygon)):
+            v1 = polygon[i]
+            v2 = polygon[(i + 1) % len(polygon)]
+            # Create coordinate key (sorted for consistency)
+            coords = sorted([v1, v2])
+            coord_key = f"{coords[0]}-{coords[1]}"
+            if coord_key in self._coord_to_edge_id:
+                edge_ids.add(self._coord_to_edge_id[coord_key])
+        return edge_ids
     
     def _update_scores(self):
         """Update player scores based on claimed edges"""
@@ -192,64 +196,99 @@ class FixedVoronoiRLEnvironment:
         self.player2_score = self._calculate_player_score(2)
     
     def _calculate_player_score(self, player: int) -> int:
-        """Calculate score for a player"""
+        """Calculate score for a player (full recompute).
+        
+        Canonical scoring rule (matches ai-game.js):
+        - Non-polygon edges: 1 point each
+        - Polygon edges: 4 points each
+        """
         player_edges = [eid for eid, p in self.claimed_edges.items() if p == player]
         
-        # Base score: 1 point per edge
-        score = len(player_edges)
-        
-        # Find polygons for bonus points
+        # Find all polygons
         polygons = self._find_polygons(player_edges)
-        score += len(polygons) * 4  # 4 bonus points per polygon
+        
+        # Collect all edges that are part of any polygon
+        edges_in_polygons = set()
+        for polygon in polygons:
+            polygon_edge_ids = self._get_polygon_edge_ids(polygon)
+            edges_in_polygons.update(polygon_edge_ids)
+        
+        # Non-polygon edges: 1 point each, polygon edges: 4 points each
+        non_polygon_count = len([e for e in player_edges if e not in edges_in_polygons])
+        polygon_edge_count = len(edges_in_polygons)
+        
+        score = non_polygon_count + polygon_edge_count * 4
         
         return score
     
     def _find_polygons(self, player_edges: List[str]) -> List[List[str]]:
-        """Find all polygons formed by player's edges"""
-        # Simplified polygon detection
+        """Find all polygons formed by player's edges (with deduplication)."""
         if len(player_edges) < 3:
             return []
         
         # Build adjacency map
-        edge_map = {}
+        adjacency = {}
         for edge_id in player_edges:
-            edge = next(e for e in self.edges if e['id'] == edge_id)
+            edge = self._edge_map.get(edge_id)
+            if not edge:
+                continue
             v1 = f"{edge['x1']},{edge['y1']}"
             v2 = f"{edge['x2']},{edge['y2']}"
             
-            if v1 not in edge_map:
-                edge_map[v1] = []
-            if v2 not in edge_map:
-                edge_map[v2] = []
+            if v1 not in adjacency:
+                adjacency[v1] = []
+            if v2 not in adjacency:
+                adjacency[v2] = []
             
-            edge_map.get(v1, []).append(v2)
-            edge_map.get(v2, []).append(v1)
+            adjacency[v1].append(v2)
+            adjacency[v2].append(v1)
         
-        # Find cycles (simplified)
+        # Find cycles using DFS
         polygons = []
         visited = set()
         
-        def find_cycles_from_vertex(start_vertex, path):
-            if len(path) > 2 and start_vertex in path[:-1]:
-                # Found a cycle
-                cycle_start = path.index(start_vertex)
-                cycle = path[cycle_start:]
-                if len(cycle) >= 3:  # Valid polygon
-                    polygons.append(cycle.copy())
-                return
+        def find_cycles_from_vertex(start_vertex: str) -> List[List[str]]:
+            """Find all cycles starting from a vertex."""
+            cycles = []
+            path = [start_vertex]
+            path_set = {start_vertex}
             
-            visited.add(start_vertex)
-            path.append(start_vertex)
+            def dfs(current: str):
+                for neighbor in adjacency.get(current, []):
+                    if neighbor == start_vertex and len(path) >= 3:
+                        # Found a cycle
+                        cycle = path.copy()
+                        cycles.append(cycle)
+                    elif neighbor not in path_set:
+                        path.append(neighbor)
+                        path_set.add(neighbor)
+                        dfs(neighbor)
+                        path.pop()
+                        path_set.remove(neighbor)
             
-            for neighbor in edge_map.get(start_vertex, []):
-                if neighbor not in path or (len(path) > 2 and neighbor == path[0]):
-                    find_cycles_from_vertex(neighbor, path)
-            
-            path.pop()
+            dfs(start_vertex)
+            return cycles
         
-        for vertex in edge_map:
+        # Find cycles from each vertex
+        for vertex in adjacency:
             if vertex not in visited:
-                find_cycles_from_vertex(vertex, [])
+                cycles = find_cycles_from_vertex(vertex)
+                for cycle in cycles:
+                    # Normalize cycle to avoid duplicates
+                    min_idx = cycle.index(min(cycle))
+                    normalized = cycle[min_idx:] + cycle[:min_idx]
+                    
+                    # Check if this polygon is already found
+                    is_duplicate = False
+                    for existing in polygons:
+                        if set(existing) == set(normalized):
+                            is_duplicate = True
+                            break
+                    
+                    if not is_duplicate:
+                        polygons.append(normalized)
+                
+                visited.add(vertex)
         
         return polygons
     

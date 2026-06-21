@@ -24,14 +24,14 @@ The game is built around **Voronoi diagrams** - geometric structures that partit
 ### Game Mechanics
 - **Edge Claiming**: Players take turns clicking on edges to claim them
 - **Scoring System**: 
-  - 1 point for each claimed edge
-  - 5 bonus points for each complete polygon formed
+  - 1 point for each claimed edge that is NOT part of a completed polygon
+  - 4 points for each claimed edge that IS part of a completed polygon
 - **Turn-Based Play**: Alternating turns between Player 1 (Red) and Player 2 (Blue)
 - **Win Condition**: Player with the highest score when all edges are claimed wins
 
 ### Strategic Elements
 - Players must balance claiming individual edges versus working toward polygon completion
-- Polygon formation provides significant bonus points (5x multiplier)
+- Polygon formation upgrades each contributing edge from 1 point to 4 points (4x multiplier)
 - Limited edges create competitive resource management
 - Spatial awareness of edge connections is crucial
 
@@ -126,7 +126,7 @@ The game is built around **Voronoi diagrams** - geometric structures that partit
 3. **Edge Claiming**: Edge changes to player's color
 4. **Score Update**: Scores update immediately
 5. **Polygon Check**: System checks for completed polygons
-6. **Bonus Points**: Polygon bonuses added if applicable
+6. **Score Recalculation**: Edges in completed polygons score 4 points each instead of 1
 7. **Turn Switch**: Next player's turn begins
 8. **Game End**: When all edges claimed, winner is announced
 

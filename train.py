@@ -7,6 +7,7 @@ import os
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 from typing import List, Tuple, Optional, Dict
@@ -378,8 +379,6 @@ def train_from_scratch(num_iterations: int = 50, games_per_iteration: int = 20,
     trainer.run(verbose=True)
 
 
-# Need to import F for the training code
-import torch.nn.functional as F
 
 if __name__ == '__main__':
     # Example usage

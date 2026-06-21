@@ -133,9 +133,8 @@ GET /api/mcts_stats
 ## Scoring Integration
 
 The MCTS AI respects the existing scoring system:
-- **Base:** +1 point per claimed edge
-- **Bonus:** +3 points per polygon side
-- **Total:** Each polygon edge = 1 base + 3 bonus = 4 points
+- **Non-polygon edge:** 1 point per claimed edge not part of a completed polygon
+- **Polygon edge:** 4 points per claimed edge that is part of a completed polygon
 
 ## Performance Optimization
 

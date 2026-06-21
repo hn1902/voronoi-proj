@@ -66,8 +66,8 @@ A modern, interactive web-based game that combines Voronoi diagrams with strateg
 - Each edge can only be claimed once
 - Edges are claimed by clicking on them
 - Score is calculated based on:
-  - Number of claimed edges
-  - Number of complete polygons formed
+  - **1 point** for each claimed edge that is NOT part of a completed polygon
+  - **4 points** for each claimed edge that IS part of a completed polygon
 - Game ends when all edges are claimed
 - Player with highest score wins
 

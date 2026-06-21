@@ -32,6 +32,18 @@ class GameStateSnapshot:
         # Precompute adjacency for performance
         self._adjacency_map = None
         self._polygon_edges = None
+        self._edge_map = {e['id']: e for e in self.edges}
+        
+        # Build coordinate-to-edge-id mapping
+        self._coord_to_edge_id = {}
+        for edge in self.edges:
+            x1, y1 = edge['x1'], edge['y1']
+            x2, y2 = edge['x2'], edge['y2']
+            v1 = f"{x1},{y1}"
+            v2 = f"{x2},{y2}"
+            coords = sorted([v1, v2])
+            coord_key = f"{coords[0]}-{coords[1]}"
+            self._coord_to_edge_id[coord_key] = edge['id']
     
     def clone(self) -> 'GameStateSnapshot':
         """Create deep copy of state for simulation."""
@@ -81,7 +93,17 @@ class GameStateSnapshot:
         self._polygon_edges = None
     
     def _calculate_score_change(self, action: int) -> int:
-        """Calculate score change for claiming an edge."""
+        """Calculate score change for claiming an edge.
+        
+        Canonical scoring rule (matches ai-game.js):
+        - Non-polygon edges: 1 point each
+        - Polygon edges: 4 points each
+        
+        Since this is incremental (called once per move), when a polygon
+        closes we must retroactively credit ALL edges in it. Each of the
+        k edges in the polygon was previously worth 1pt and should now be
+        worth 4pt, so the bonus is +3 per edge = 3*k total.
+        """
         edge = self.edges[action]
         player = self.claimed_edges[edge['id']]
         
@@ -89,18 +111,14 @@ class GameStateSnapshot:
         score = 1
         
         # Check if this edge completes any new polygons
-        player_edges = [eid for eid, pid in self.claimed_edges.items() if pid == player]
-        
-        # Find polygons formed by player's edges
         polygons = self._find_polygons_for_player(player)
         
-        # Add bonus for polygon sides
-        # +3 points per side of each polygon
         for polygon in polygons:
-            # Check if the newly claimed edge is part of this polygon
             polygon_edge_ids = self._get_polygon_edge_ids(polygon)
             if edge['id'] in polygon_edge_ids:
-                score += 3  # Bonus for completing a polygon side
+                # Retroactive bonus: upgrade ALL k edges from 1pt -> 4pt
+                k = len(polygon_edge_ids)
+                score += 3 * k
         
         return score
     
@@ -110,10 +128,11 @@ class GameStateSnapshot:
         for i in range(len(polygon)):
             v1 = polygon[i]
             v2 = polygon[(i + 1) % len(polygon)]
-            # Create edge ID (sorted for consistency)
+            # Create coordinate key (sorted for consistency)
             coords = sorted([v1, v2])
-            edge_id = f"{coords[0]}-{coords[1]}"
-            edge_ids.add(edge_id)
+            coord_key = f"{coords[0]}-{coords[1]}"
+            if coord_key in self._coord_to_edge_id:
+                edge_ids.add(self._coord_to_edge_id[coord_key])
         return edge_ids
     
     def _get_adjacency_map(self) -> Dict[str, List[str]]:
@@ -124,16 +143,14 @@ class GameStateSnapshot:
         adjacency = defaultdict(list)
         
         for edge_id, player in self.claimed_edges.items():
-            # Parse edge ID to get vertices
-            try:
-                start, end = edge_id.split('-')
-                v1 = start.strip()
-                v2 = end.strip()
-                
-                adjacency[v1].append(v2)
-                adjacency[v2].append(v1)
-            except ValueError:
+            edge = self._edge_map.get(edge_id)
+            if not edge:
                 continue
+            v1 = f"{edge['x1']},{edge['y1']}"
+            v2 = f"{edge['x2']},{edge['y2']}"
+            
+            adjacency[v1].append(v2)
+            adjacency[v2].append(v1)
         
         self._adjacency_map = dict(adjacency)
         return self._adjacency_map
@@ -149,15 +166,14 @@ class GameStateSnapshot:
         adjacency = defaultdict(list)
         
         for edge_id in player_edges:
-            try:
-                start, end = edge_id.split('-')
-                v1 = start.strip()
-                v2 = end.strip()
-                
-                adjacency[v1].append(v2)
-                adjacency[v2].append(v1)
-            except ValueError:
+            edge = self._edge_map.get(edge_id)
+            if not edge:
                 continue
+            v1 = f"{edge['x1']},{edge['y1']}"
+            v2 = f"{edge['x2']},{edge['y2']}"
+            
+            adjacency[v1].append(v2)
+            adjacency[v2].append(v1)
         
         # Find cycles using DFS
         polygons = []

@@ -3,6 +3,7 @@ Evaluation System for Voronoi AlphaZero RL
 Compare trained NN+MCTS vs heuristic MCTS vs random agent.
 """
 
+import os
 import time
 import torch
 import numpy as np
@@ -252,8 +253,6 @@ def visualize_policy(model: VoronoiNet, state: GameStateSnapshot = None):
         print(f"  Edge {action} ({edge['id']}): {prob:.4f}")
 
 
-# Need to import os
-import os
 
 if __name__ == '__main__':
     print("Voronoi AlphaZero Evaluation")
